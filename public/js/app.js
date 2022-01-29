@@ -2012,6 +2012,15 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 
@@ -2024,27 +2033,43 @@ __webpack_require__.r(__webpack_exports__);
     variants: {
       type: Array,
       required: true
+    },
+    product: {
+      type: Object,
+      required: false
     }
   },
   data: function data() {
+    var _this = this;
+
     return {
+      product_id: '',
       product_name: '',
       product_sku: '',
       description: '',
-      images: [],
       product_variant: [{
         option: this.variants[0].id,
         tags: []
       }],
       product_variant_prices: [],
       dropzoneOptions: {
-        url: 'https://httpbin.org/post',
+        url: '/product/image',
         thumbnailWidth: 150,
         maxFilesize: 0.5,
         headers: {
-          "My-Awesome-Header": "header value"
+          "X-CSRF-TOKEN": document.head.querySelector("[name=csrf-token]").content
+        },
+        success: function success(file, response) {
+          _this.product_id = response.id;
+        },
+        sending: function sending(file, xhr, formData) {
+          formData.append("id", _this.product_id);
         }
-      }
+      },
+      message: '',
+      errors: '',
+      loading: false,
+      is_editing: false
     };
   },
   methods: {
@@ -2060,8 +2085,7 @@ __webpack_require__.r(__webpack_exports__);
         return !selected_variants.some(function (entry2) {
           return entry1 == entry2;
         });
-      }); // console.log(available_variants)
-
+      });
       this.product_variant.push({
         option: available_variants[0],
         tags: []
@@ -2069,7 +2093,7 @@ __webpack_require__.r(__webpack_exports__);
     },
     // check the variant and render all the combination
     checkVariant: function checkVariant() {
-      var _this = this;
+      var _this2 = this;
 
       var tags = [];
       this.product_variant_prices = [];
@@ -2077,7 +2101,7 @@ __webpack_require__.r(__webpack_exports__);
         tags.push(item.tags);
       });
       this.getCombn(tags).forEach(function (item) {
-        _this.product_variant_prices.push({
+        _this2.product_variant_prices.push({
           title: item,
           price: 0,
           stock: 0
@@ -2100,24 +2124,70 @@ __webpack_require__.r(__webpack_exports__);
     },
     // store product into database
     saveProduct: function saveProduct() {
+      var _this3 = this;
+
+      this.loading = true;
       var product = {
+        id: this.product_id,
         title: this.product_name,
         sku: this.product_sku,
         description: this.description,
-        product_image: this.images,
         product_variant: this.product_variant,
         product_variant_prices: this.product_variant_prices
       };
-      axios.post('/product', product).then(function (response) {
-        console.log(response.data);
-      })["catch"](function (error) {
-        console.log(error);
-      });
-      console.log(product);
+
+      if (this.is_editing) {
+        axios.put("/product/".concat(this.product_id), product).then(function (response) {
+          _this3.message = response.data;
+          _this3.loading = false;
+        })["catch"](function (error) {
+          _this3.errors = error.response.data.errors;
+          _this3.loading = false;
+        });
+      } else {
+        axios.post('/product', product).then(function (response) {
+          _this3.message = response.data;
+          _this3.loading = false;
+
+          if (response.data.success) {
+            _this3.product_id = '';
+            _this3.product_name = '';
+            _this3.product_sku = '';
+            _this3.description = '';
+            _this3.product_variant_prices = '';
+          }
+        })["catch"](function (error) {
+          _this3.errors = error.response.data.errors;
+          _this3.loading = false;
+        });
+      }
     }
   },
   mounted: function mounted() {
-    console.log('Component mounted.');
+    var _this4 = this;
+
+    if (this.product) {
+      this.is_editing = true;
+      this.product_id = this.product.id;
+      this.product_name = this.product.title;
+      this.product_sku = this.product.sku;
+      this.description = this.product.description;
+      this.product_variant_prices = this.product.prices;
+      this.product.variants.map(function (variant) {
+        var product_variant = _this4.product_variant.find(function (product_variant) {
+          return variant.id == product_variant.option;
+        });
+
+        if (product_variant) {
+          product_variant.tags.push(variant.pivot.variant);
+        } else {
+          _this4.product_variant.push({
+            option: variant.id,
+            tags: [variant.pivot.variant]
+          });
+        }
+      });
+    }
   }
 });
 
@@ -50473,6 +50543,27 @@ var render = function() {
   var _h = _vm.$createElement
   var _c = _vm._self._c || _h
   return _c("section", [
+    _c(
+      "div",
+      {
+        directives: [
+          {
+            name: "show",
+            rawName: "v-show",
+            value: _vm.message,
+            expression: "message"
+          }
+        ],
+        staticClass: "alert alert alert-dismissible",
+        class: _vm.message.success ? "alert-success" : "alert-danger"
+      },
+      [
+        _c("strong", [_vm._v(_vm._s(_vm.message.message))]),
+        _vm._v(" "),
+        _vm._m(0)
+      ]
+    ),
+    _vm._v(" "),
     _c("div", { staticClass: "row" }, [
       _c("div", { staticClass: "col-md-6" }, [
         _c("div", { staticClass: "card shadow mb-4" }, [
@@ -50500,7 +50591,13 @@ var render = function() {
                     _vm.product_name = $event.target.value
                   }
                 }
-              })
+              }),
+              _vm._v(" "),
+              _vm.errors && _vm.errors["title"]
+                ? _c("span", { staticClass: "invalid-feedback" }, [
+                    _vm._v(_vm._s(_vm.errors["title"][0]))
+                  ])
+                : _vm._e()
             ]),
             _vm._v(" "),
             _c("div", { staticClass: "form-group" }, [
@@ -50526,7 +50623,13 @@ var render = function() {
                     _vm.product_sku = $event.target.value
                   }
                 }
-              })
+              }),
+              _vm._v(" "),
+              _vm.errors && _vm.errors["sku"]
+                ? _c("span", { staticClass: "invalid-feedback" }, [
+                    _vm._v(_vm._s(_vm.errors["sku"][0]))
+                  ])
+                : _vm._e()
             ]),
             _vm._v(" "),
             _c("div", { staticClass: "form-group" }, [
@@ -50552,13 +50655,19 @@ var render = function() {
                     _vm.description = $event.target.value
                   }
                 }
-              })
+              }),
+              _vm._v(" "),
+              _vm.errors && _vm.errors["description"]
+                ? _c("span", { staticClass: "invalid-feedback" }, [
+                    _vm._v(_vm._s(_vm.errors["description"][0]))
+                  ])
+                : _vm._e()
             ])
           ])
         ]),
         _vm._v(" "),
         _c("div", { staticClass: "card shadow mb-4" }, [
-          _vm._m(0),
+          _vm._m(1),
           _vm._v(" "),
           _c(
             "div",
@@ -50576,7 +50685,7 @@ var render = function() {
       _vm._v(" "),
       _c("div", { staticClass: "col-md-6" }, [
         _c("div", { staticClass: "card shadow mb-4" }, [
-          _vm._m(1),
+          _vm._m(2),
           _vm._v(" "),
           _c(
             "div",
@@ -50700,7 +50809,7 @@ var render = function() {
           _c("div", { staticClass: "card-body" }, [
             _c("div", { staticClass: "table-responsive" }, [
               _c("table", { staticClass: "table" }, [
-                _vm._m(2),
+                _vm._m(3),
                 _vm._v(" "),
                 _c(
                   "tbody",
@@ -50778,10 +50887,10 @@ var render = function() {
       "button",
       {
         staticClass: "btn btn-lg btn-primary",
-        attrs: { type: "submit" },
+        attrs: { type: "submit", disabled: _vm.loading },
         on: { click: _vm.saveProduct }
       },
-      [_vm._v("Save")]
+      [_vm._v(_vm._s(_vm.loading ? "Saving..." : "Save"))]
     ),
     _vm._v(" "),
     _c(
@@ -50792,6 +50901,23 @@ var render = function() {
   ])
 }
 var staticRenderFns = [
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c(
+      "button",
+      {
+        staticClass: "close",
+        attrs: {
+          type: "button",
+          "data-dismiss": "alert",
+          "aria-label": "Close"
+        }
+      },
+      [_c("span", { attrs: { "aria-hidden": "true" } }, [_vm._v("×")])]
+    )
+  },
   function() {
     var _vm = this
     var _h = _vm.$createElement
@@ -63300,8 +63426,8 @@ __webpack_require__.r(__webpack_exports__);
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
-__webpack_require__(/*! /home/rifat/Programming/mediusware/interview/interview-question-sr/resources/js/app.js */"./resources/js/app.js");
-module.exports = __webpack_require__(/*! /home/rifat/Programming/mediusware/interview/interview-question-sr/resources/sass/app.scss */"./resources/sass/app.scss");
+__webpack_require__(/*! D:\laragon\www\interview-question-sr\resources\js\app.js */"./resources/js/app.js");
+module.exports = __webpack_require__(/*! D:\laragon\www\interview-question-sr\resources\sass\app.scss */"./resources/sass/app.scss");
 
 
 /***/ })
